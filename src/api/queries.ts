@@ -1,20 +1,46 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "react-oidc-context";
 import {
+  createAuditLogEntry,
+  fetchAuditLogs,
   fetchServiceConfigs,
   fetchServices,
   updateFeatureFlag,
   updateSubpageFeatureFlag,
 } from "./client";
 import type {
+  CreateAuditLogPayload,
   EnrichedService,
   ServiceAccessConfig,
   ServiceSummary,
 } from "./types";
 
+/**
+ * Builds a human-readable name from the OIDC profile. Cognito may provide
+ * `name`, or separate `given_name`/`family_name` fields, or just `email`.
+ */
+function resolveDisplayName(
+  profile: { name?: string; given_name?: string; family_name?: string; email?: string } | undefined
+): string | null {
+  if (!profile) {
+    return null;
+  }
+  if (profile.name) {
+    return profile.name;
+  }
+  if (profile.given_name || profile.family_name) {
+    return [profile.given_name, profile.family_name].filter(Boolean).join(" ");
+  }
+  return profile.email ?? null;
+}
+
 export const queryKeys = {
   services: ["services"] as const,
   configs: ["service-configs"] as const,
+  auditLogs: (serviceSlug?: string) =>
+    serviceSlug
+      ? (["audit-logs", serviceSlug] as const)
+      : (["audit-logs"] as const),
 };
 
 /** Fetches and merges services + feature flag configs into enriched entries. */
@@ -112,6 +138,28 @@ export function useToggleFeatureFlag() {
       return { previous };
     },
 
+    onSuccess: (_data, { serviceSlug, isProtected }) => {
+      const token = auth.user?.access_token;
+      const profile = auth.user?.profile;
+      const email = profile?.email ?? "unknown";
+      if (!token) {
+        return;
+      }
+
+      const payload: CreateAuditLogPayload = {
+        serviceSlug,
+        subpageSlug: null,
+        scope: "service",
+        action: isProtected ? "enable" : "disable",
+        performedBy: email,
+        performedByName: resolveDisplayName(profile),
+      };
+
+      createAuditLogEntry(payload, token).catch(() => {
+        // Audit logging is best-effort — never block the toggle flow
+      });
+    },
+
     onError: (_err, _vars, context) => {
       if (context?.previous) {
         queryClient.setQueryData(queryKeys.configs, context.previous);
@@ -120,6 +168,7 @@ export function useToggleFeatureFlag() {
 
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.configs });
+      queryClient.invalidateQueries({ queryKey: queryKeys.auditLogs() });
     },
   });
 }
@@ -204,6 +253,28 @@ export function useToggleSubpageFeatureFlag() {
       return { previous };
     },
 
+    onSuccess: (_data, { serviceSlug, subpageSlug, isProtected }) => {
+      const token = auth.user?.access_token;
+      const profile = auth.user?.profile;
+      const email = profile?.email ?? "unknown";
+      if (!token) {
+        return;
+      }
+
+      const payload: CreateAuditLogPayload = {
+        serviceSlug,
+        subpageSlug,
+        scope: "subpage",
+        action: isProtected ? "enable" : "disable",
+        performedBy: email,
+        performedByName: resolveDisplayName(profile),
+      };
+
+      createAuditLogEntry(payload, token).catch(() => {
+        // Audit logging is best-effort — never block the toggle flow
+      });
+    },
+
     onError: (_err, _vars, context) => {
       if (context?.previous) {
         queryClient.setQueryData(queryKeys.configs, context.previous);
@@ -212,7 +283,27 @@ export function useToggleSubpageFeatureFlag() {
 
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.configs });
+      queryClient.invalidateQueries({ queryKey: queryKeys.auditLogs() });
     },
+  });
+}
+
+// --- Audit logs --------------------------------------------------------------
+
+export function useAuditLogs(serviceSlug?: string) {
+  const auth = useAuth();
+
+  return useQuery({
+    queryKey: queryKeys.auditLogs(serviceSlug),
+    queryFn: () => {
+      const token = auth.user?.access_token;
+      if (!token) {
+        throw new Error("Not authenticated");
+      }
+      return fetchAuditLogs(token, serviceSlug);
+    },
+    enabled: !!auth.user?.access_token,
+    staleTime: 30 * 1000,
   });
 }
 

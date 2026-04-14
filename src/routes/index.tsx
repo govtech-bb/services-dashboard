@@ -1,13 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AlertCircle, RefreshCw } from "lucide-react";
+import { AlertCircle, History, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import {
+  useAuditLogs,
   useEnrichedServices,
   useToggleFeatureFlag,
   useToggleSubpageFeatureFlag,
 } from "@/api/queries";
 import type { EnrichedService } from "@/api/types";
+import { ActivityLog } from "@/components/activity-log";
 import { ServicesTable } from "@/components/services-table";
+import { Sheet } from "@/components/ui/sheet";
 
 export const Route = createFileRoute("/")({
   component: ServicesPage,
@@ -26,10 +29,12 @@ const tabs: { id: Tab; label: string }[] = [
 function ServicesPage() {
   const [activeTab, setActiveTab] = useState<Tab>("all");
   const [search, setSearch] = useState("");
+  const [showActivityLog, setShowActivityLog] = useState(false);
 
   const { data, isLoading, isError, error } = useEnrichedServices();
   const toggleMutation = useToggleFeatureFlag();
   const toggleSubpageMutation = useToggleSubpageFeatureFlag();
+  const auditLogsQuery = useAuditLogs();
 
   const counts = data
     ? {
@@ -66,13 +71,27 @@ function ServicesPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="font-semibold text-gray-900 text-xl">Services</h1>
-        <p className="mt-1 text-gray-500 text-sm">
-          {data
-            ? `${data.length} services total — manage visibility and feature flags`
-            : "Loading services…"}
-        </p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="font-semibold text-gray-900 text-xl">Services</h1>
+          <p className="mt-1 text-gray-500 text-sm">
+            {data
+              ? `${data.length} services total — manage visibility and feature flags`
+              : "Loading services…"}
+          </p>
+        </div>
+        <button
+          className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition-colors ${
+            showActivityLog
+              ? "bg-blue-50 text-blue-600"
+              : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+          }`}
+          onClick={() => setShowActivityLog((prev) => !prev)}
+          type="button"
+        >
+          <History className="h-4 w-4" />
+          Activity log
+        </button>
       </div>
 
       {/* Tab bar */}
@@ -169,7 +188,11 @@ function ServicesPage() {
           onToggleFeatureFlag={(slug, isProtected) =>
             toggleMutation.mutate({ serviceSlug: slug, isProtected })
           }
-          onToggleSubpageFeatureFlag={(serviceSlug, subpageSlug, isProtected) =>
+          onToggleSubpageFeatureFlag={(
+            serviceSlug,
+            subpageSlug,
+            isProtected
+          ) =>
             toggleSubpageMutation.mutate({
               serviceSlug,
               subpageSlug,
@@ -188,6 +211,18 @@ function ServicesPage() {
           }
         />
       )}
+
+      {/* Activity log drawer */}
+      <Sheet
+        onClose={() => setShowActivityLog(false)}
+        open={showActivityLog}
+        title="Recent activity"
+      >
+        <ActivityLog
+          entries={auditLogsQuery.data}
+          isLoading={auditLogsQuery.isLoading}
+        />
+      </Sheet>
     </div>
   );
 }

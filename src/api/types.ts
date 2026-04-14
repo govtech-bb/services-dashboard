@@ -45,6 +45,28 @@ export type ApiEnvelope<T> = {
   success: boolean;
 };
 
+// --- Audit log ---------------------------------------------------------------
+
+export type AuditLogAction = "enable" | "disable";
+
+/** Scope differentiates service-level vs subpage-level toggles. */
+export type AuditLogScope = "service" | "subpage";
+
+export type AuditLogEntry = {
+  id: string;
+  serviceSlug: string;
+  /** null for service-level toggles */
+  subpageSlug: string | null;
+  scope: AuditLogScope;
+  action: AuditLogAction;
+  performedBy: string;
+  /** Human-readable display name — null for entries created before this field existed. */
+  performedByName: string | null;
+  performedAt: string;
+};
+
+export type CreateAuditLogPayload = Omit<AuditLogEntry, "id" | "performedAt">;
+
 /**
  * A service enriched with both its catalogue metadata and its feature flag state.
  *

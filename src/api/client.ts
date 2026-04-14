@@ -1,7 +1,9 @@
 import { REGISTRY_BY_TITLE } from "@/data/service-registry";
 import type {
   ApiEnvelope,
+  AuditLogEntry,
   CatalogueStatus,
+  CreateAuditLogPayload,
   ServiceAccessConfig,
   ServiceSummary,
 } from "./types";
@@ -206,4 +208,78 @@ export function updateSubpageFeatureFlag(
     { isProtected },
     accessToken
   );
+}
+
+// --- Audit log (form-processor-api) -----------------------------------------
+
+export async function createAuditLogEntry(
+  payload: CreateAuditLogPayload,
+  accessToken: string
+): Promise<AuditLogEntry> {
+  const res = await fetch(`${PROCESSING_API_URL}/audit-logs`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to create audit log entry: ${res.status} ${text}`);
+  }
+
+  const json: ApiEnvelope<AuditLogEntry> = await res.json();
+  return json.data;
+}
+
+/**
+ * The audit-logs GET endpoint returns a paginated wrapper:
+ *   { success, data: { entries: [...], total, limit, offset, hasMore } }
+ *
+ * We normalise both possible shapes (paginated object vs plain array)
+ * so the rest of the client always receives AuditLogEntry[].
+ */
+type PaginatedAuditLogs = {
+  entries: AuditLogEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+};
+
+export async function fetchAuditLogs(
+  accessToken: string,
+  serviceSlug?: string
+): Promise<AuditLogEntry[]> {
+  const url = new URL(`${PROCESSING_API_URL}/audit-logs`);
+  if (serviceSlug) {
+    url.searchParams.set("serviceSlug", serviceSlug);
+  }
+
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch audit logs: ${res.status}`);
+  }
+
+  const json = (await res.json()) as
+    | ApiEnvelope<PaginatedAuditLogs>
+    | ApiEnvelope<AuditLogEntry[]>;
+
+  const payload = json.data;
+
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  // Paginated shape — unwrap the entries array
+  if (payload && "entries" in payload && Array.isArray(payload.entries)) {
+    return payload.entries;
+  }
+
+  return [];
 }
