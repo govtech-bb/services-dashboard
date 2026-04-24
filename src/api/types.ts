@@ -65,7 +65,14 @@ export type AuditLogEntry = {
   performedAt: string;
 };
 
-export type CreateAuditLogPayload = Omit<AuditLogEntry, "id" | "performedAt">;
+/**
+ * Actor identity fields are omitted — the API derives them from the verified
+ * Cognito access token and never accepts them from the client.
+ */
+export type CreateAuditLogPayload = Omit<
+  AuditLogEntry,
+  "id" | "performedAt" | "performedBy" | "performedByName"
+>;
 
 /**
  * A service enriched with both its catalogue metadata and its feature flag state.

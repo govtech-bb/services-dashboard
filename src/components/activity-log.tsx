@@ -29,6 +29,7 @@ function formatRelativeTime(isoDate: string): string {
 }
 
 function ActionLabel({ entry }: { entry: AuditLogEntry }) {
+  const actor = entry.performedBy;
   const verb = entry.action === "enable" ? "enabled" : "disabled";
   const target =
     entry.scope === "subpage" && entry.subpageSlug
@@ -37,6 +38,7 @@ function ActionLabel({ entry }: { entry: AuditLogEntry }) {
 
   return (
     <span>
+      <span className="text-gray-600">{actor}</span>{" "}
       <span className={`font-medium ${entry.action === "enable" ? "text-green-600" : "text-red-600"}`}>{verb}</span>{" "}
       {entry.scope === "subpage" ? "subpage " : ""}
       <span className="font-mono text-gray-700">{target}</span>
@@ -95,7 +97,6 @@ export function ActivityLog({ entries, isLoading }: ActivityLogProps) {
               <ActionLabel entry={entry} />
             </p>
             <p className="mt-0.5 text-gray-400 text-xs">
-              {entry.performedByName ?? entry.performedBy} &middot;{" "}
               <time dateTime={entry.performedAt}>
                 {formatRelativeTime(entry.performedAt)}
               </time>

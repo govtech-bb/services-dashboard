@@ -12,7 +12,7 @@ const cognitoAuthConfig = {
   client_id: import.meta.env.VITE_COGNITO_CLIENT_ID as string,
   redirect_uri: import.meta.env.VITE_COGNITO_REDIRECT_URI as string,
   response_type: "code",
-  scope: "openid email",
+  scope: "openid email profile aws.cognito.signin.user.admin",
   /**
    * After the Cognito Hosted UI redirects back with ?code=..., the library
    * exchanges it for tokens automatically then calls this. We strip the OAuth
@@ -45,5 +45,5 @@ createRoot(root).render(
         {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
       </QueryClientProvider>
     </AuthProvider>
-  </StrictMode>
+  </StrictMode>,
 );
